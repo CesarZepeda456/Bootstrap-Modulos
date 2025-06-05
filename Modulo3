@@ -1,91 +1,205 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proyecto Módulo 3</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</head>
-<body>
-    <!-- Carousel -->
-    <div id="carouselExample" class="carousel slide" data-bs-ride="carousel" data-bs-interval="2000">
-        <div class="carousel-inner">
-            <div class="carousel-item active">
-                <img src="https://via.placeholder.com/1200x400" class="d-block w-100" alt="...">
-            </div>
-            <div class="carousel-item">
-                <img src="https://via.placeholder.com/1200x400" class="d-block w-100" alt="...">
-            </div>
-        </div>
-        <button class="carousel-control-prev" type="button" data-bs-target="#carouselExample" data-bs-slide="prev">
-            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-        </button>
-        <button class="carousel-control-next" type="button" data-bs-target="#carouselExample" data-bs-slide="next">
-            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-        </button>
-    </div>
-    
-    <!-- Tabs -->
-    <ul class="nav nav-tabs" id="myTabs">
-        <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#info">Información</a></li>
-        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#precios">Precios</a></li>
+// app.module.ts
+import { NgModule, InjectionToken } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { RouterModule, Routes, CanActivate } from '@angular/router';
+import { HttpClientModule, HttpClient } from '@angular/common/http';
+import { ReactiveFormsModule, FormBuilder, Validators, FormGroup } from '@angular/forms';
+import { StoreModule, Action, createReducer, on, createAction, props, Store } from '@ngrx/store';
+import { Injectable, Component, Inject, Output, EventEmitter } from '@angular/core';
+import Dexie from 'dexie';
+import { Observable, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
+
+// 3. InjectionToken para la URL del API
+export const API_URL = new InjectionToken<string>('apiUrl');
+
+// 1. Servicio de autenticación simple
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private loggedIn = false;
+  login() { this.loggedIn = true; }
+  logout() { this.loggedIn = false; }
+  isLoggedIn(): boolean { return this.loggedIn; }
+}
+
+// 1 y 2. Guard que protege rutas usando AuthService
+@Injectable({ providedIn: 'root' })
+export class AuthGuard implements CanActivate {
+  constructor(private auth: AuthService, private router: RouterModule) {}
+  canActivate(): boolean {
+    if (!this.auth.isLoggedIn()) {
+      alert('No estás logueado');
+      return false;
+    }
+    return true;
+  }
+}
+
+// 9. Servicio Dexie para DB IndexedDB
+@Injectable({ providedIn: 'root' })
+export class AppDexieService extends Dexie {
+  items: Dexie.Table<Item, number>;
+  constructor() {
+    super('AppDB');
+    this.version(1).stores({ items: '++id,name,votes' });
+    this.items = this.table('items');
+  }
+}
+
+// Item interface
+export interface Item {
+  id?: number;
+  name: string;
+  votes: number;
+}
+
+// 4. Interface para servicio de datos
+export interface IDataService {
+  getItems(): Observable<Item[]>;
+  addItem(item: Item): Observable<Item>;
+}
+
+// 7 y 8. Servicio que se comunica con API y Redux
+@Injectable()
+export class ApiDataService implements IDataService {
+  constructor(private http: HttpClient,
+              private store: Store<{items: Item[]}>,
+              @Inject(API_URL) private apiUrl: string,
+              private dexie: AppDexieService) {}
+
+  getItems(): Observable<Item[]> {
+    return this.http.get<Item[]>(`${this.apiUrl}/items`);
+  }
+
+  addItem(item: Item): Observable<Item> {
+    return this.http.post<Item>(`${this.apiUrl}/items`, item).pipe(
+      tap(async (newItem) => {
+        // 8. Dispatch redux action
+        this.store.dispatch(addItem({ item: newItem }));
+        // 10. Guardar en Dexie
+        await this.dexie.items.add(newItem);
+      })
+    );
+  }
+}
+
+// 5. Otra clase compatible para usar con useExisting
+@Injectable()
+export class CacheDataService implements IDataService {
+  private cache: Item[] = [];
+  getItems(): Observable<Item[]> { return of(this.cache); }
+  addItem(item: Item): Observable<Item> {
+    this.cache.push(item);
+    return of(item);
+  }
+}
+
+// 9. Redux Actions
+export const addItem = createAction('[Item] Add', props<{ item: Item }>());
+export const removeItem = createAction('[Item] Remove', props<{ id: number }>());
+
+// 9. Reducer para items
+const initialState: Item[] = [];
+
+const itemsReducer = createReducer(
+  initialState,
+  on(addItem, (state, { item }) => [...state, item]),
+  on(removeItem, (state, { id }) => state.filter(i => i.id !== id))
+);
+
+// 6. Componente protegido por guard con formulario y EventEmitter
+@Component({
+  selector: 'app-protected',
+  template: `
+    <h2>Área protegida</h2>
+    <app-item-form (itemAdded)="onItemAdded($event)"></app-item-form>
+    <ul>
+      <li *ngFor="let item of items$ | async">
+        {{item.name}} - Votos: {{item.votes}}
+        <button (click)="voteUp(item)">👍</button>
+        <button (click)="voteDown(item)">👎</button>
+      </li>
     </ul>
-    <div class="tab-content">
-        <div class="tab-pane fade show active" id="info">Contenido de Información</div>
-        <div class="tab-pane fade" id="precios">Contenido de Precios</div>
-    </div>
-    
-    <!-- Collapse -->
-    <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseInfo">Mostrar Más</button>
-    <div class="collapse" id="collapseInfo">Contenido adicional.</div>
-    
-    <!-- Accordion -->
-    <div class="accordion" id="accordionExample">
-        <div class="accordion-item">
-            <h2 class="accordion-header">
-                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">Opción 1</button>
-            </h2>
-            <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#accordionExample">
-                <div class="accordion-body">Detalle de la opción 1.</div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Tooltip -->
-    <button type="button" class="btn btn-secondary" data-bs-toggle="tooltip" title="Información adicional">Hover Me</button>
-    
-    <!-- Modal -->
-    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#myModal">Abrir Modal</button>
-    <div class="modal fade" id="myModal">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Regístrate</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form>
-                        <div class="mb-3">
-                            <label for="nombre" class="form-label">Nombre</label>
-                            <input type="text" class="form-control" id="nombre">
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-primary">Enviar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        // Inicializar tooltips
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    </script>
-</body>
-</html>
+  `
+})
+export class ProtectedComponent {
+  items$: Observable<Item[]>;
+
+  constructor(private store: Store<{items: Item[]}>,
+              private dataService: ApiDataService) {
+    this.items$ = store.select('items');
+  }
+
+  onItemAdded(item: Item) {
+    this.dataService.addItem(item).subscribe();
+  }
+
+  voteUp(item: Item) {
+    const updated = {...item, votes: item.votes + 1};
+    // Aquí deberías actualizar vía API/Redux (simplificado)
+  }
+
+  voteDown(item: Item) {
+    const updated = {...item, votes: item.votes - 1};
+    // Aquí deberías actualizar vía API/Redux (simplificado)
+  }
+}
+
+// 6. Componente hijo con formulario y EventEmitter
+@Component({
+  selector: 'app-item-form',
+  template: `
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <input formControlName="name" placeholder="Nombre" />
+      <div *ngIf="form.get('name')?.invalid && form.get('name')?.touched">Requerido y debe tener 3-20 caracteres</div>
+      <button type="submit" [disabled]="form.invalid">Agregar</button>
+    </form>
+  `
+})
+export class ItemFormComponent {
+  @Output() itemAdded = new EventEmitter<Item>();
+
+  form: FormGroup;
+
+  constructor(private fb: FormBuilder) {
+    this.form = this.fb.group({
+      name: ['', [Validators.required, Validators.minLength(3), Validators.maxLength(20)]]
+    });
+  }
+
+  submit() {
+    if (this.form.valid) {
+      this.itemAdded.emit({name: this.form.value.name, votes: 0});
+      this.form.reset();
+    }
+  }
+}
+
+// 2. Rutas y guard
+const routes: Routes = [
+  { path: 'protected', component: ProtectedComponent, canActivate: [AuthGuard] },
+  { path: '', redirectTo: '/protected', pathMatch: 'full' }
+];
+
+// Módulo principal
+@NgModule({
+  declarations: [ProtectedComponent, ItemFormComponent],
+  imports: [
+    BrowserModule,
+    ReactiveFormsModule,
+    HttpClientModule,
+    RouterModule.forRoot(routes),
+    StoreModule.forRoot({items: itemsReducer})
+  ],
+  providers: [
+    AuthService,
+    AuthGuard,
+    AppDexieService,
+    { provide: API_URL, useValue: 'http://localhost:3000' },
+    { provide: IDataService, useClass: ApiDataService },
+    { provide: CacheDataService, useExisting: ApiDataService }
+  ],
+  bootstrap: [ProtectedComponent]
+})
+export class AppModule {}
+
