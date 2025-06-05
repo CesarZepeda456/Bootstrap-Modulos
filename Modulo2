@@ -1,121 +1,150 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Sitio Web</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.1/font/css/open-iconic-bootstrap.min.css">
-    <style>
-        .navbar {
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-        }
-        .content {
-            margin-top: 70px;
-        }
-        .table-container {
-            overflow-x: auto;
-        }
-    </style>
-</head>
-<body>
-    <!-- Barra de navegación -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="#">Mi Tienda</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="#">Inicio</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Productos</a></li>
-                    <li class="nav-item"><a class="nav-link" href="#">Contacto</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { AppComponent } from './app.component';
+import { FormularioComponent } from './formulario.component';
+import { ListadoComponent } from './listado.component';
+import { ReactiveFormsModule } from '@angular/forms';
+import { RouterModule, Routes } from '@angular/router';
+import { StoreModule } from '@ngrx/store';
+import { votosReducer } from './votos.reducer';
 
-    <div class="content container mt-5">
-        <!-- Breadcrumbs -->
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="#">Inicio</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Productos</li>
-            </ol>
-        </nav>
+const routes: Routes = [
+  { path: '', redirectTo: 'formulario', pathMatch: 'full' },
+  { path: 'formulario', component: FormularioComponent }
+];
 
-        <!-- Banner -->
-        <div class="mb-4">
-            <img src="banner.jpg" class="img-fluid" alt="Promoción">
-        </div>
+@NgModule({
+  declarations: [AppComponent, FormularioComponent, ListadoComponent],
+  imports: [
+    BrowserModule,
+    ReactiveFormsModule,
+    RouterModule.forRoot(routes),
+    StoreModule.forRoot({ votos: votosReducer })
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule {}
 
-        <!-- Productos en Cards -->
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card">
-                    <img src="producto1.jpg" class="card-img-top" alt="Producto 1">
-                    <div class="card-body">
-                        <h5 class="card-title">Producto 1</h5>
-                        <p class="card-text">Descripción del producto.</p>
-                    </div>
-                    <div class="card-footer">$10.00</div>
-                </div>
-            </div>
-            <!-- Agrega más productos aquí -->
-        </div>
 
-        <!-- Tabla con Scroll -->
-        <div class="table-container mt-4">
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>Ítem</th>
-                        <th>Descripción</th>
-                        <th>Precio</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>1</td>
-                        <td>Producto A</td>
-                        <td>$10.00</td>
-                        <td><span class="oi oi-pencil"></span></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+// app.component.ts
+import { Component } from '@angular/core';
+@Component({
+  selector: 'app-root',
+  template: `
+    <router-outlet></router-outlet>
+    <app-formulario (datosEnviados)="agregarElemento($event)"></app-formulario>
+    <app-listado></app-listado>
+  `
+})
+export class AppComponent {
+  agregarElemento(datos: any) {
+    console.log('Recibido:', datos);
+  }
+}
 
-        <!-- Formulario -->
-        <form class="mt-4">
-            <div class="mb-3">
-                <label for="email" class="form-label">Correo Electrónico</label>
-                <input type="email" class="form-control" id="email">
-            </div>
-            <div class="mb-3">
-                <label for="opcion" class="form-label">Selecciona una opción</label>
-                <select class="form-select" id="opcion">
-                    <option>Suscripción</option>
-                    <option>Comentario</option>
-                </select>
-            </div>
-            <div class="mb-3">
-                <label class="form-check-label">
-                    <input type="checkbox" class="form-check-input"> Acepto los términos
-                </label>
-            </div>
-            <div class="mb-3">
-                <label for="mensaje" class="form-label">Mensaje</label>
-                <textarea class="form-control" id="mensaje"></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Enviar</button>
-        </form>
-    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+// formulario.component.ts
+import { Component, Output, EventEmitter } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+
+@Component({
+  selector: 'app-formulario',
+  template: `
+    <form [formGroup]="form" (ngSubmit)="enviar()">
+      <input type="text" formControlName="nombre" placeholder="Nombre">
+      <div *ngIf="hasError('nombre', 'required')">Nombre requerido</div>
+      <div *ngIf="hasError('nombre', 'minLength')">Mínimo 3 caracteres</div>
+      <input type="text" formControlName="edad" placeholder="Edad">
+      <div *ngIf="hasError('edad', 'required')">Edad requerida</div>
+      <button type="submit">Enviar</button>
+    </form>
+  `
+})
+export class FormularioComponent {
+  @Output() datosEnviados = new EventEmitter<any>();
+  form: FormGroup;
+  constructor(private fb: FormBuilder) {
+    this.form = this.fb.group({
+      nombre: ['', [Validators.required, this.minLengthValidator(3)]],
+      edad: ['', Validators.required]
+    });
+  }
+
+  minLengthValidator(min: number) {
+    return (control: any) => control.value && control.value.length < min ? { minLength: true } : null;
+  }
+
+  enviar() {
+    if (this.form.valid) this.datosEnviados.emit(this.form.value);
+  }
+
+  hasError(control: string, error: string) {
+    return this.form.get(control)?.hasError(error);
+  }
+}
+
+
+// listado.component.ts
+import { Component } from '@angular/core';
+import { Store } from '@ngrx/store';
+import * as VotosActions from './votos.actions';
+import { Observable } from 'rxjs';
+
+@Component({
+  selector: 'app-listado',
+  template: `
+    <ul>
+      <li *ngFor="let elem of elementos$ | async">
+        {{ elem.nombre }} - 👍 {{ elem.votosAFavor }} 👎 {{ elem.votosEnContra }}
+        <button (click)="votarPositivo(elem.nombre)">👍</button>
+        <button (click)="votarNegativo(elem.nombre)">👎</button>
+        <button (click)="borrar(elem.nombre)">🗑️</button>
+      </li>
+    </ul>
+  `
+})
+export class ListadoComponent {
+  elementos$: Observable<any[]>;
+  constructor(private store: Store<{ votos: any[] }>) {
+    this.elementos$ = store.select('votos');
+  }
+  votarPositivo(nombre: string) { this.store.dispatch(VotosActions.votarAFavor({ nombre })); }
+  votarNegativo(nombre: string) { this.store.dispatch(VotosActions.votarEnContra({ nombre })); }
+  borrar(nombre: string) { this.store.dispatch(VotosActions.borrar({ nombre })); }
+}
+
+
+// votos.actions.ts
+import { createAction, props } from '@ngrx/store';
+
+export const agregar = createAction('[Votos] Agregar', props<{ nombre: string }>());
+export const borrar = createAction('[Votos] Borrar', props<{ nombre: string }>());
+export const votarAFavor = createAction('[Votos] Votar A Favor', props<{ nombre: string }>());
+export const votarEnContra = createAction('[Votos] Votar En Contra', props<{ nombre: string }>());
+
+
+// votos.reducer.ts
+import { createReducer, on } from '@ngrx/store';
+import * as VotosActions from './votos.actions';
+
+export interface Elemento {
+  nombre: string;
+  votosAFavor: number;
+  votosEnContra: number;
+}
+
+export const initialState: Elemento[] = [];
+
+export const votosReducer = createReducer(
+  initialState,
+  on(VotosActions.agregar, (state, { nombre }) => [...state, { nombre, votosAFavor: 0, votosEnContra: 0 }]),
+  on(VotosActions.borrar, (state, { nombre }) => state.filter(e => e.nombre !== nombre)),
+  on(VotosActions.votarAFavor, (state, { nombre }) =>
+    state.map(e => e.nombre === nombre ? { ...e, votosAFavor: e.votosAFavor + 1 } : e)
+  ),
+  on(VotosActions.votarEnContra, (state, { nombre }) =>
+    state.map(e => e.nombre === nombre ? { ...e, votosEnContra: e.votosEnContra + 1 } : e)
+  )
+);
+
