@@ -1,80 +1,165 @@
-// index.html
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modal con Bootstrap y jQuery</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-    <div class="container mt-5">
-        <button id="modalBtn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#myModal">Abrir Modal</button>
-        <div class="modal fade" id="myModal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="modalLabel">Título del Modal</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">Contenido del modal...</div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/scripts.js"></script>
-</body>
-</html>
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { AppComponent } from './app.component';
+import { MapComponent } from './map.component';
+import { AnimatedComponent } from './animated.component';
+import { TrackingDirective } from './tracking.directive';
+import { HttpClientModule } from '@angular/common/http';
+import { StoreModule } from '@ngrx/store';
+import { trackingReducer } from './store/tracking.reducer';
+import { NgxMapboxGLModule } from 'ngx-mapbox-gl';
 
-// js/scripts.js
-$(document).ready(function() {
-    var modal = $('#myModal');
-    var modalBtn = $('#modalBtn');
-    
-    modal.on('show.bs.modal', function() {
-        console.log('El modal está por abrirse');
-        modalBtn.prop('disabled', true).css('background-color', 'gray');
-    });
-    
-    modal.on('shown.bs.modal', function() {
-        console.log('El modal se ha abierto');
-    });
-    
-    modal.on('hide.bs.modal', function() {
-        console.log('El modal está por cerrarse');
-    });
-    
-    modal.on('hidden.bs.modal', function() {
-        console.log('El modal se ha cerrado');
-        modalBtn.prop('disabled', false).css('background-color', '');
-    });
-});
+@NgModule({
+  declarations: [AppComponent, MapComponent, AnimatedComponent, TrackingDirective],
+  imports: [
+    BrowserModule,
+    HttpClientModule,
+    StoreModule.forRoot({ tracking: trackingReducer }),
+    NgxMapboxGLModule.withConfig({
+      accessToken: 'your_mapbox_token'
+    })
+  ],
+  providers: [],
+  bootstrap: [AppComponent]
+})
+export class AppModule {}
 
-// scss/styles.scss
-$color-amarillo: yellow;
-$color-rojo: red;
-$color-verde: green;
-
-@mixin box-styles($margen, $padding, $bg-color) {
-    margin: $margen;
-    padding: $padding;
-    background-color: $bg-color;
-}
-
-.btn {
-    @include box-styles(10px, 15px, $color-verde);
-}
-
-// package.json
-{
-  "scripts": {
-    "scss": "node-sass -o css/ scss/"
+// map.component.ts
+import { Component } from '@angular/core';
+@Component({
+  selector: 'app-map',
+  template: `
+    <mgl-map [style]="'mapbox://styles/mapbox/streets-v11'" [zoom]="[12]" [center]="[-74.5, 40]">
+      <mgl-marker [lngLat]="[-74.5, 40]" (markerClick)="onMarkerClick()">
+        <div>📍</div>
+      </mgl-marker>
+    </mgl-map>
+    <div *ngIf="showMessage">¡Hiciste clic en el marcador!</div>
+  `
+})
+export class MapComponent {
+  showMessage = false;
+  onMarkerClick() {
+    this.showMessage = true;
   }
 }
+
+// animated.component.ts
+import { Component } from '@angular/core';
+import { trigger, state, style, transition, animate } from '@angular/animations';
+
+@Component({
+  selector: 'app-animated',
+  animations: [
+    trigger('openClose', [
+      state('open', style({ height: '200px', opacity: 1 })),
+      state('closed', style({ height: '100px', opacity: 0.5 })),
+      transition('open <=> closed', [animate('0.5s')])
+    ])
+  ],
+  template: `
+    <div [@openClose]="isOpen ? 'open' : 'closed'">Animación de tamaño</div>
+    <button (click)="toggle()">Toggle</button>
+  `
+})
+export class AnimatedComponent {
+  isOpen = true;
+  toggle() {
+    this.isOpen = !this.isOpen;
+  }
+}
+
+// tracking.directive.ts
+import { Directive, ElementRef, HostListener, Input } from '@angular/core';
+import { Store } from '@ngrx/store';
+import { incrementTag } from './store/tracking.actions';
+
+@Directive({ selector: '[appTracking]' })
+export class TrackingDirective {
+  @Input('appTracking') trackingTag = '';
+
+  constructor(private el: ElementRef, private store: Store) {}
+
+  @HostListener('click') onClick() {
+    this.store.dispatch(incrementTag({ tag: this.trackingTag }));
+  }
+}
+
+// tracking.actions.ts
+import { createAction, props } from '@ngrx/store';
+export const incrementTag = createAction('[Tracking] Increment', props<{ tag: string }>());
+
+// tracking.reducer.ts
+import { createReducer, on } from '@ngrx/store';
+import { incrementTag } from './tracking.actions';
+
+export const initialState: { [key: string]: number } = {};
+
+export const trackingReducer = createReducer(
+  initialState,
+  on(incrementTag, (state, { tag }) => ({
+    ...state,
+    [tag]: (state[tag] || 0) + 1
+  }))
+);
+
+// tracking.reducer.spec.ts
+import { trackingReducer, initialState } from './tracking.reducer';
+import { incrementTag } from './tracking.actions';
+
+describe('trackingReducer', () => {
+  it('should increment tag count', () => {
+    const action = incrementTag({ tag: 'click1' });
+    const state = trackingReducer(initialState, action);
+    expect(state['click1']).toBe(1);
+  });
+});
+
+// app.component.html
+<app-map></app-map>
+<app-animated appTracking="animacion"></app-animated>
+<div *ngFor="let tag of (tracking$ | async) | keyvalue">
+  {{tag.key}}: {{tag.value}}
+</div>
+
+// app.component.ts
+import { Component } from '@angular/core';
+import { Store } from '@ngrx/store';
+@Component({ selector: 'app-root', templateUrl: './app.component.html' })
+export class AppComponent {
+  tracking$ = this.store.select('tracking');
+  constructor(private store: Store<{ tracking: any }>) {}
+}
+
+// .circleci/config.yml
+version: 2.1
+jobs:
+  build:
+    docker:
+      - image: circleci/node:14
+    steps:
+      - checkout
+      - run: npm install
+      - run: npm run test
+      - run: npm run cypress:run
+
+// cypress/e2e/track.spec.cy.js
+describe('Tracking Directive', () => {
+  it('increments tracking count', () => {
+    cy.visit('/');
+    cy.contains('Toggle').click();
+    cy.contains('animacion: 1');
+  });
+
+  it('shows marker message', () => {
+    cy.visit('/');
+    cy.get('div:contains("📍")').click();
+    cy.contains('¡Hiciste clic en el marcador!');
+  });
+
+  it('toggles animation', () => {
+    cy.visit('/');
+    cy.contains('Toggle').click();
+  });
+});
